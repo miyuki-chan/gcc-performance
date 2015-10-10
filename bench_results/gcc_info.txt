@@ -1,0 +1,17 @@
+Disable bootstrap
+Stage 0 compiler: GCC 5.2.0
+
+Configured with: /home/miyuki/gcc/src/configure --disable-multilib --prefix=/opt/gcc-6.0.0 --disable-bootstrap --enable-clocale=gnu --enable-languages=c,c++,lto CC=/opt/gcc-5.2.0-fdo/bin/gcc --disable-nls CXXFLAGS='-O2 -g -pipe' --with-isl=/opt/isl-0.14 --with-demangler-in-ld CXX=/opt/gcc-5.2.0-fdo/bin/g++ --with-system-zlib --enable-checking=release --with-fpmath=sse --enable-shared --with-as=/opt/binutils-2.25.1/bin/as CFLAGS='-O2 -g -pipe' MAKEINFO=/bin/true build_configargs=CONFIG_SITE=/home/miyuki/scripts_gcc/configury.stfu host_configargs=CONFIG_SITE=/home/miyuki/scripts_gcc/configury.stfu
+Thread model: posix
+gcc version 6.0.0 20150923 (experimental) (GCC)
+
+svn+ssh://gcc.gnu.org/svn/gcc/trunk@228065
+
+Target: x86_64-pc-linux-gnu
+Optimization flags:
+    Ofast: -Ofast -march=haswell
+    O2: -O2
+    Og: -Og -ggdb3
+    O0: -O0 -ggdb3
+Host: x86_64-pc-linux-gnu, ivybridge
+
