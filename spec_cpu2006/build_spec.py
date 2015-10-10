@@ -7,52 +7,136 @@
 # changes to GCC code do not affect codegen)
 
 from __future__ import print_function
-from spec_pkg import flags
 
 import os, os.path, stat
-
+from os.path import isdir
 import multiprocessing, logging
 import shutil
-import yaml
 import sys
-import sh
 import argparse
-from sh import md5sum
 
-LANG_C      = 'C'
-LANG_CXX    = 'C++'
-LANG_F      = 'Fortran'
-LANG_FC     = 'C, Fortran'
+# Local stuff
+import spec_flags
+import config
 
-ROOT_PATH   = os.path.expanduser('~/ramdrive')
-SPEC_PATH   = os.path.expanduser('~/spec_cpu2006/benchspec/CPU2006')
+# List of benchmarks which should be skipped, e.g.:
+# SKIP = ['400.perlbench']
+SKIP        = []
 
-#GCC_PATH    = '/opt/gcc-6.0.0/libexec/gcc/x86_64-pc-linux-gnu/6.0.0'
-GCC_PATH    = '/opt/gcc-6.0.0-fdo/libexec/gcc/x86_64-pc-linux-gnu/6.0.0'
-CLANG_PATH  = '/opt/clang-3.7.0/bin'
+# Function aliases
+pexists = os.path.exists
+pjoin   = os.path.join
+
+ALLOCATORS = {
+    # Path of libtcmalloc_minimal.so.
+    # Set it manually, if needed but not found automatically
+    'tcmalloc': None,
+
+    # Path of libjemalloc.so.1. Likewise.
+    'jemalloc': None
+}
+
+SELF_DIR    = os.path.dirname(__file__)
+SPEC_PATH   = pjoin(config.SPEC_PATH, 'benchspec', 'CPU2006')
+ROOT_PATH   = config.WORK_PATH
+SOURCES_YML = pjoin(SELF_DIR, 'sources.yml')
+
+
+def error(msg):
+    sys.stderr.write('Error: {}\n'.format(msg))
+    sys.exit(1)
+
+
+try:
+    import sh
+except:
+    error('required package \'sh\' not found')
+
+try:
+    import yaml
+except:
+    error('required package \'pyYAML\' not found')
+
+try:
+    from sh import md5sum
+except:
+    error('md5sum not found')
+
+
+def perform_sanity_checks(args):
+    global CLANG_PATH
+
+    if not isdir(SPEC_PATH):
+        error('directory \'{}\' does not exist!'
+              ' Please set SPEC_PATH in config.py'.format(SPEC_PATH))
+    if not isdir(ROOT_PATH):
+        error('directory \'{}\' does not exist!'
+              ' Please set WORK_PATH in config.py'.format(ROOT_PATH))
+    if not pexists(pjoin(GCC_PATH, 'cc1')):
+        error('cc1 binary does not exist in {}. Please'
+              ' build the C compiler'.format(GCC_PATH))
+    if not pexists(pjoin(GCC_PATH, 'cc1plus')):
+        error('cc1plus binary does not exist in {}. Please'
+              ' build the C++ compiler'.format(GCC_PATH))
+    if args.clang:
+        if not isdir(CLANG_ROOT_PATH):
+            error('directory \'{}\' does not exist!'
+                  ' Please set CLANG_ROOT_PATH in config.py'
+                  ' to use Clang'.format(CLANG_ROOT_PATH))
+        CLANG_PATH  = pjoin(config.CLANG_ROOT_PATH, 'bin')
+        if not pexists(CLANG_PATH):
+            error('file \'{}\' does not exist. Please set'
+                  ' CLANG_ROOT_PATH correctly in config.py'.format(CLANG_PATH))
+
+def find_allocators(args):
+    if args.alloc not in ALLOCATORS:
+        return
+
+    if ALLOCATORS[args.alloc]:
+        alloc_path = ALLOCATORS[args.alloc]
+        if not pexists(alloc_path):
+            error('file \'{}\' not found. Please set'
+                    ' ALLOCATORS correctly'.format(alloc_path))
+    else:
+        paths = {'tcmalloc': ['/usr/lib64/libtcmalloc_minimal.so',            # CentOS, Fedora
+                            '/usr/lib/libtcmalloc_minimal.so.4'],             # Debian, Ubuntu
+
+                'jemalloc': ['/usr/lib64/libjemalloc.so.1',                   # CentOS, Fedora
+                            '/usr/lib/x86_64-linux-gnu/libjemalloc.so.1']}    # Debian, Ubuntu
+        for path in paths[args.alloc]:
+            if pexists(path):
+                ALLOCATORS[args.alloc] = path
+                break
+        if not ALLOCATORS[args.alloc]:
+            error('{} not found. Please set'
+                  'ALLOCATORS dict manually'.format(args.alloc))
+
+
+def find_compilers():
+    global GCC_PATH
+    if config.GCC_BUILD_PATH is not None:
+        GCC_PATH = pjoin(config.GCC_BUILD_PATH, 'gcc')
+        if not pexists(GCC_PATH):
+            error('{} not found. Please set'
+                  ' GCC_BUILD_PATH correctly in config.py'.format(GCC_PATH))
+    else:
+        if config.GCC_ROOT_PATH is None:
+            error('GCC_ROOT_PATH not set in config.py')
+        libexec_path = os.path.join(config.GCC_ROOT_PATH, 'libexec', 'gcc')
+        if not isdir(libexec_path):
+            error('directory \'{}\' does not exist.'
+                  ' Please set GCC_ROOT_PATH correctly in config.py'.format(libexec_path))
+        arch_dir = os.listdir(libexec_path)[0]
+        ver_dir = os.listdir(pjoin(libexec_path, arch_dir))[0]
+        GCC_PATH = pjoin(libexec_path, arch_dir, ver_dir)
+
 
 INVOKE_PREFIX = 'taskset 0x00000001 chrt --fifo 99 '
-HOST_OS     = 'Debian'
 
-if HOST_OS == 'CentOS':
-    TCMALLOC_PREFIX = 'export LD_PRELOAD=/usr/lib64/libtcmalloc_minimal.so'
-    JEMALLOC_PREFIX = 'export LD_PRELOAD=/usr/lib64/libjemalloc.so.1'
-else:
-    TCMALLOC_PREFIX = 'export LD_PRELOAD=/usr/lib/libtcmalloc_minimal.so.4'
-    JEMALLOC_PREFIX = 'export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.1'
-
-
-SKIP        = [\
-#   '400.perlbench', '401.bzip2',
-#   '403.gcc', '429.mcf',
-#   '433.milc', '444.namd',
-#   '445.gobmk', '450.soplex',
-#   '453.povray', '456.hmmer',
-#   '458.sjeng', '462.libquantum',
-#   '464.h264ref', '470.lbm',
-#   '471.omnetpp', '473.astar',
-#   '482.sphinx3', '483.xalancbmk',
-]
+LANG_C          = 'C'
+LANG_CXX        = 'C++'
+LANG_F          = 'Fortran'
+LANG_FC         = 'C, Fortran'
 
 COMPILER_FNAME  = { LANG_C:      'cc1',
                     LANG_CXX:    'cc1plus',
@@ -99,7 +183,7 @@ def compile_with_checksums(args):
     queue = []
     for bench in os.listdir(root_dir):
         options = ['-O', '-w' '-quiet', '-o', '-', '-fpreprocessed']
-        options += flags.CRUTCHES.get(bench, [])
+        options += spec_flags.CRUTCHES.get(bench, [])
         bench_dir = pjoin(root_dir, bench)
         for (ind, fname) in enumerate(sorted(os.listdir(bench_dir))):
             full_path = pjoin(bench_dir, fname)
@@ -112,8 +196,7 @@ def compile_with_checksums(args):
 
 
 def preprocess_sources(args):
-    self_dir = os.path.dirname(__file__)
-    f = open(pjoin(self_dir, 'sources.yml'), 'r')
+    f = open(pjoin(SELF_DIR, 'sources.yml'), 'r')
     data = yaml.load(f)
     f.close()
 
@@ -134,9 +217,9 @@ def preprocess_sources(args):
 
         print('Preprocessing: {}'.format(name))
 
-        defines = ['-D' + x for x in flags.DEFS + flags.OTHER_DEFS.get(name, [])]
-        includes = ['-I' + x for x in flags.INCLUDES.get(name, [])]
-        options = defines + includes + flags.CRUTCHES.get(name, [])
+        defines = ['-D' + x for x in spec_flags.DEFS + spec_flags.OTHER_DEFS.get(name, [])]
+        includes = ['-I' + x for x in spec_flags.INCLUDES.get(name, [])]
+        options = defines + includes + spec_flags.CRUTCHES.get(name, [])
         if not args.clang:
             options.append('-quiet')
         if props['lang'] == LANG_CXX and args.cxx98:
@@ -185,7 +268,7 @@ def gen_shell_scripts(args):
     top_script.write('export CFLAGS=\'{0}\'\n'
                      'export CXXFLAGS=\'{0}{1}\'\n'.format(opt_flags, cxx_flags))
     if args.alloc:
-        top_script.write(args.alloc + '\n')
+        top_script.write('export LD_PRELOAD=\'{}\'\n'.format(ALLOCATORS[args.alloc]))
     invoke_prefix = INVOKE_PREFIX
     log_path = '"$1"'
     top_script.write('rm -f {}\n'.format(log_path))
@@ -203,7 +286,7 @@ def gen_shell_scripts(args):
             if args.mem_report:
                 options.append('-fmem-report')
                 args.verbose = True
-        options += flags.CRUTCHES.get(bench, [])
+        options += spec_flags.CRUTCHES.get(bench, [])
         options = ' '.join(options)
         fnames = os.listdir(bench_dir)
         MARK_STEP = 0.1
@@ -244,7 +327,15 @@ def gen_shell_scripts(args):
     print('Done!')
 
 def main():
-    parser = argparse.ArgumentParser()
+    find_compilers()
+
+    parser = argparse.ArgumentParser(description=
+'''This script compiles, or preprocesses SPEC CPU2006 benchmark, or generates
+a shell script for compiling it. It is intended for build
+time measurements. It can also calculate checksums of generated
+assembly files (to verify that some changes to GCC code do not
+affect codegen)''')
+
     action_grp = parser.add_mutually_exclusive_group()
     action_grp.add_argument('--preprocess', action='store_const', const=preprocess_sources,
                         dest='action', help='preprocess SPEC CPU2006 sources')
@@ -254,9 +345,9 @@ def main():
     action_grp.add_argument('--shell', action='store_const', const=gen_shell_scripts,
                         dest='action', help='generate shell script for timed compilation (default)')
     alloc_grp = parser.add_mutually_exclusive_group()
-    alloc_grp.add_argument('--jemalloc', action='store_const', dest='alloc', const=JEMALLOC_PREFIX,
+    alloc_grp.add_argument('--jemalloc', action='store_const', dest='alloc', const='tcmalloc',
                         help='preload JEMalloc memory allocator')
-    alloc_grp.add_argument('--tcmalloc', action='store_const', dest='alloc', const=TCMALLOC_PREFIX,
+    alloc_grp.add_argument('--tcmalloc', action='store_const', dest='alloc', const='jemalloc',
                         help='preload TCMalloc memory allocator')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='output timing information for each translation unit')
@@ -270,6 +361,10 @@ def main():
                         help='optimization options (default: %(default)s)')
     parser.set_defaults(action=gen_shell_scripts, alloc='')
     args = parser.parse_args()
+
+    find_allocators(args)
+    perform_sanity_checks(args)
+
     prepare_compilers_dict(CLANG_PATH if args.clang else GCC_PATH,
                            CLANG_FNAME if args.clang else COMPILER_FNAME)
     args.action(args)

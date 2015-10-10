@@ -1,18 +1,31 @@
 #!/usr/bin/env python2.7
 
-# This script collects lists of SPEC CPU2006 source files
-# from build scripts.
-# NYI for 447.dealII, because it's source is partially generated
+# This script was used to generate sources.yml file
+
+# It collects lists of SPEC CPU2006 source files from SPEC build scripts.
+# The list is output to stdout in yaml format.
+
+# Not yet implemented for 447.dealII, because it's source is partially generated
 # by the build system.
 
-# List is output to stdout in yaml format. It is intended for
-# use by buildspec.py
+from __future__ import print_function
 
 import os, os.path
 import shutil
-import yaml
+import sys
 
-SPEC_DIR = os.path.expanduser('~/spec_cpu2006/benchspec/CPU2006')
+import config
+
+def error(msg):
+    sys.stderr.write('Error: '+msg+'\n')
+    sys.exit(1)
+
+try:
+    import yaml
+except:
+    error('required package pyYAML not installed')
+
+SPEC_DIR = os.path.join(config.SPEC_PATH, 'benchspec', 'CPU2006')
 
 LANG_C      = 'C'
 LANG_CXX    = 'C++'
@@ -30,10 +43,12 @@ LANG_BY_EXT = {'.cc': LANG_CXX,
 
 def main():
     data = {}
+    if not os.path.isdir(SPEC_DIR):
+        error('Directory \'{}\' does not exist'.format(SPEC_DIR))
     for name in os.listdir(SPEC_DIR):
         if name in ['998.specrand', '999.specrand', '447.dealII']:
             continue
-        full = os.path.join(top_dir, name)
+        full = os.path.join(SPEC_DIR, name)
         if os.path.isdir(full):
             obj_pm_path = os.path.join(full, 'Spec', 'object.pm')
             obj_pm = open(obj_pm_path, 'r')
@@ -57,20 +72,20 @@ def main():
             for fname in src_list:
                 _, ext = os.path.splitext(fname)
                 if ext not in LANG_BY_EXT:
-                    print fname
+                    print(fname)
                 langs.add(LANG_BY_EXT[ext])
             if len(langs) == 1:
                 lang = list(langs)[0]
             elif langs == set([LANG_C, LANG_F]):
                 lang = LANG_FC
             else:
-                print src_list
-                print langs
-                assert(False)
+                sys.stderr.write('Error parsing \'{}\',\n'
+                                 'Languages: \'{}\'\n'.format(src_list, langs))
+                sys.exit(1)
             data[name] = {}
             data[name]['sources'] = src_list
             data[name]['lang'] = lang
-    print yaml.dump(data, default_flow_style=False)
+    print(yaml.dump(data, default_flow_style=False))
 
 if __name__ == '__main__':
     main()

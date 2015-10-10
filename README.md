@@ -46,8 +46,8 @@ You may use any tools to analyze published performance data: it's in CSV format 
 popular statisctics software, such as R. Nevertheless this repository contains some aggreggated results in
 Python Jupyter format. In order to use them you will need:
 
-1. Python 2.7.x (*FIXME:* compatibility with Python 3.4.x)
-2. [Jupyter](https://jupyter.org) notebook (*FIXME*: check if IPython is enough)
+1. Python 2.7.x (**FIXME:** compatibility with Python 3.4.x)
+2. [Jupyter](https://jupyter.org) notebook (**FIXME**: check if IPython is enough)
 3. [pandas](http://pandas.pydata.org) data analysis library, version 0.16+
 4. [matplotlib](http://matplotlib.org), version 1.4+
 
@@ -56,18 +56,18 @@ In order to perform measurements yourself, you will need:
 
 1. GNU/Linux OS and an account with `sudo` privilege (see later)
 2. Python 2.7.x and the following packages (available via `pip`):
-    1. sh
-    2. pyYAML
+    1. `sh`
+    2. `pyYAML`
 3. Installed copy of [SPEC CPU2006](https://www.spec.org/cpu2006/) benchmark
-4. perf
-5. taskset (*FIXME*: add support for numactl)
-6. chrt
+4. `perf`
+5. `taskset` (**FIXME**: add support for `numactl`)
+6. `chrt`
 7. The compiler you are planning to test (the compiler proper, i.e. `cc1` and `cc1plus` is enough,
 but an installed compiler will, of course, also work)
 
 ## TODO
 
-Add a manual
+**Add a manual**
 
 ## Planned improvements
 
