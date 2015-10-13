@@ -18,7 +18,6 @@ import argparse
 
 # Local modules
 import spec_flags
-import config
 
 # List of benchmarks which should be skipped, e.g.:
 # SKIP = ['400.perlbench']
@@ -42,6 +41,12 @@ def error(msg):
     '''Output error message to stderr and exit with non-zero exit code'''
     sys.stderr.write('Error: {}\n'.format(msg))
     sys.exit(1)
+
+try:
+    import config
+except:
+    error('config.py not found. You should create it'
+          ' (you might want to use config.py.example as an example')
 
 # Import required modules. Error out, if failed
 try:
@@ -258,8 +263,7 @@ def wrap_bind_aff_sched(args, cmd):
     return INVOKE_PREFIX + cmd
 
 def wrap_perf(args, cmd, log_path):
-    rep = '-r '+str(args.repeat) if args.repeat > 1 else ''
-    return 'perf stat -d -x, {} -o {} --append {}'.format(rep, log_path, cmd)
+    return 'perf stat -d -x, -o {} --append {}'.format(log_path, cmd)
 
 def gen_shell_scripts(args):
     if args.clang:
@@ -329,8 +333,16 @@ def gen_shell_scripts(args):
             cmd = ' '.join(cmd_parts)
             cmd = wrap_perf(args, cmd, log_path)
             cmd = wrap_bind_aff_sched(args, cmd)
-            dest.write('echo \'# WORKLOAD: {}/{}\' >> {}\n'.format(bench, fname, log_path))
-            dest.write(cmd + ' 2>&1\n')
+            cmd += ' 2>&1\n'
+            workload_cmd = 'echo \'# WORKLOAD: {}/{}\' >> {}\n'.format(
+                                bench, fname, log_path)
+            if args.repeat > 1:
+                dest.write('for i in {{1..{}}}; do\n'.format(args.repeat))
+                dest.write('    ' + cmd)
+                dest.write('    ' + workload_cmd)
+                dest.write('done\n')
+            else:
+                dest.write(cmd + workload_cmd)
             if args.verbose:
                 dest.write('echo \'# {}\'\n'.format(fname))
             else:
@@ -363,10 +375,12 @@ affect codegen)''')
     action_grp = parser.add_mutually_exclusive_group()
     action_grp.add_argument('--preprocess', action='store_const', const=preprocess_sources,
                         dest='action', help='preprocess SPEC CPU2006 sources')
+
 # FIXME: see comments in compile_with_checksums
 #    action_grp.add_argument('--checksums', action='store_const', const=compile_with_checksums,
 #                        dest='action', help='compile proceprocessed sources and calculate '
 #                        'checksum of assembly')
+
     action_grp.add_argument('--shell', action='store_const', const=gen_shell_scripts,
                         dest='action', help='generate shell script for timed compilation (default)')
     parser.add_argument('--alloc', choices=[DEFAULT_ALLOC, 'tcmalloc', 'jemalloc'],
@@ -383,8 +397,13 @@ affect codegen)''')
     parser.add_argument('--asm', '--assembly', action='store_true',
                         help='when benchmarking Clang, produce assembly instead of object code')
     parser.add_argument('--cxx98', action='store_true', help='compile C++ code as C++98')
+
+    # Perf can aggregate results, but we will work with lots of raw data anyway,
+    # so using perf's average/std calculation does not make much sense -
+    # we will loose precision. Instead, we just run the command several times
     parser.add_argument('-r', '--repeat', type=int, default=1,
                         help='number of times to compile each unit')
+
     parser.add_argument('-O', '--optimization', default='O3',
                         help='optimization options (default: %(default)s)')
     parser.set_defaults(action=gen_shell_scripts, alloc='ptmalloc')
@@ -397,6 +416,11 @@ affect codegen)''')
     if args.action == preprocess_sources and args.with_gcc:
         parser.error('preprocessing can only be done using an installed version of GCC.'
                      ' Please set GCC_ROOT_PATH in config.py and use --gcc option')
+    if args.repeat > 1:
+        if args.action != gen_shell_scripts:
+            parser.error('--repeat is only usable with --shell')
+        if args.mem_report:
+            parser.error('--repeat is incompatible with --mem-report')
 
     if not args.clang:
         global GCC_PATH

@@ -2,20 +2,20 @@ import re
 
 class ReportError(Exception): pass
 
-def error(msg):
-    raise ReportError(msg)
-
 def to_num(s):
     try:
         return int(s)
     except ValueError:
-        return float(s)
+        try:
+            return float(s)
+        except:
+            raise ReportError('Failed to convert: '+s)
 
 class ReportLine:
     def __init__(self, line, separator):
         data = line.split(separator)
         if len(data) < 3:
-            error('Failed to parse: '+line)
+            raise ReportError('Failed to parse: '+line)
         if data[0] in ['<not counted>', '<not supported>']:
             self.name = None
             self.value = None
@@ -23,27 +23,10 @@ class ReportLine:
         self.name = data[2]
         if self.name.endswith(':HG'):
             self.name = self.name[:-3]
+        self.value = to_num(data[0])
 
-        try:
-            self.value = to_num(data[0])
-        except:
-            error('Failed to parse number \'{}\' in \'{}\''.format(data[0], line))
-        if len(data) == 4:
-            if data[3][-1] != '%':
-                error('Invalid stddev \'{}\' in \'{}\''.format(data[3], line))
-            percent = data[3][:-1]
-            try:
-                self.stddev = to_num(percent) / 100
-            except:
-                error('Failed to parse number \'{}\' in \'{}\''.format(percent, line))
-        else:
-            self.stddev = None
-    
     def __str__(self):
-        res = '{}: {}'.format(self.name, self.value)
-        if self.stddev is not None:
-            res += ' ({:.2f} %)'.format(self.stddev * 100)
-        return res
+        return '{}: {}'.format(self.name, self.value)
 
 class RunReport:
     def __init__(self, name, lines, separator):
@@ -66,7 +49,7 @@ class RunReport:
 
     def keys(self):
         return self.values.keys()
-    
+
     def __repr__(self):
         res = '<RunReport '
         if self.name is not None:
@@ -78,10 +61,6 @@ class RunReport:
 
     def __contains__(self, key):
         return key in self.values
-
-    @property
-    def have_stddev(self):
-        return self.values.values()[0].stddev is not None
 
 class PerfReport:
     WORKLOAD_RE = re.compile(r'^\s*#\s*WORKLOAD:\s*(.*?)\s*$')
@@ -97,8 +76,9 @@ class PerfReport:
 
             def maybe_flush(self, dest):
                 if not self.lines:
-                    return                
-                dest.append(RunReport(self.workload_name, self.lines, separator))
+                    return
+                dest.append(RunReport(self.workload_name,
+                                      self.lines, separator))
                 self.lines = []
                 self.workload_name = None
 
@@ -123,24 +103,19 @@ class PerfReport:
 
     def __str__(self):
         return str(self.runs)
-            
+
     def __getitem__(self, ind):
         return self.runs[ind]
 
     def __len__(self):
         return len(self.runs)
-    
+
     def get_raw_data(self):
         result = []
         for run in self.runs:
             row = {'name': run.name}
             for k, v in run.values.items():
                 row[k] = v.value
-                if v.stddev is not None:
-                    row[k + '-stddev'] = v.stddev
             result.append(row)
         return result
 
-    @property
-    def empty(self):
-        return len(self.runs) == 0
