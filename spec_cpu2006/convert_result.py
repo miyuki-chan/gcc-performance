@@ -38,7 +38,8 @@ def process_file(src_name, dest, keys=[]):
                     keys_set |= set(run.keys())
                 keys = list(sorted(keys_set))
                 assert(len(keys) != 0)
-                dest.write(','.join(['"{}"'.format(k) for k in ['name'] + keys]))
+                # FIXME!!! This gets written several times
+                dest.write(','.join(['"{}"'.format(k) for k in ['name'] + keys] + '\n'))
 
             for run in report:
                 dest.write('"{}",'.format(run.name))
