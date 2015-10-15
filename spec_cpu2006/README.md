@@ -13,7 +13,7 @@ This directory contains several scripts which are aimed at measuring compile tim
 ### 1. Installing prerequisites
 
 In order to use the scripts you will need:
-- A computer with GNU/Linux OS and an account with `sudo` privilege (see the [Benchmarking](.#4. Benchmarking) section)
+- A computer with GNU/Linux OS and an account with `sudo` privilege (see the [Benchmarking](.#4-benchmarking) section)
 
 The following prerequisites must be installed:
 
