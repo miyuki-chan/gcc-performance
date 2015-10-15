@@ -39,7 +39,7 @@ Benchmarking was performed on two different hosts (subdirectories correspond to 
 
 Some benchmarks were done only on `ivybridge` host.
 
-FIXME: add info about RAM timings.
+**FIXME:** add info about RAM timings.
 
 
 ## Benchmark sets

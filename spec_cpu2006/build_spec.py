@@ -19,6 +19,18 @@ import argparse
 # Local modules
 import spec_flags
 
+def error(msg):
+    '''Output error message to stderr and exit with non-zero exit code'''
+    sys.stderr.write('Error: {}\n'.format(msg))
+    sys.exit(1)
+
+# Local module: configuration
+try:
+    import config
+except:
+    error('config.py not found. You should create it'
+          ' (you might want to use config.py.example as an example')
+
 # List of benchmarks which should be skipped, e.g.:
 # SKIP = ['400.perlbench']
 SKIP        = []
@@ -37,16 +49,6 @@ DEFAULT_ALLOC   = 'ptmalloc'
 # No-quite-constant. Set once before actual build
 ALLOCATOR       = None
 
-def error(msg):
-    '''Output error message to stderr and exit with non-zero exit code'''
-    sys.stderr.write('Error: {}\n'.format(msg))
-    sys.exit(1)
-
-try:
-    import config
-except:
-    error('config.py not found. You should create it'
-          ' (you might want to use config.py.example as an example')
 
 # Import required modules. Error out, if failed
 try:
@@ -338,11 +340,11 @@ def gen_shell_scripts(args):
                                 bench, fname, log_path)
             if args.repeat > 1:
                 dest.write('for i in {{1..{}}}; do\n'.format(args.repeat))
-                dest.write('    ' + cmd)
                 dest.write('    ' + workload_cmd)
+                dest.write('    ' + cmd)
                 dest.write('done\n')
             else:
-                dest.write(cmd + workload_cmd)
+                dest.write(workload_cmd + cmd)
             if args.verbose:
                 dest.write('echo \'# {}\'\n'.format(fname))
             else:
