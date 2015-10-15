@@ -13,7 +13,7 @@ This directory contains several scripts which are aimed at measuring compile tim
 ### 1. Installing prerequisites
 
 In order to use the scripts you will need:
-- A computer with GNU/Linux OS and an account with `sudo` privilege (see the [Benchmarking](4. Benchmarking) section)
+- A computer with GNU/Linux OS and an account with `sudo` privilege (see the [Benchmarking](.#4. Benchmarking) section)
 
 The following prerequisites must be installed:
 
@@ -41,7 +41,9 @@ Instructions:
 
 1. Install the SPEC CPU2006 benchmark (according to the [guide](https://www.spec.org/cpu2006/Docs/install-guide-unix.html))
 2. Install the required packages:
+
     `sudo apt-get install -y python python-pip linux-tools util-linux`
+
     `sudo pip2.7 install sh pyyaml`
 3. Build and install GCC
 4. _Optionally:_ install memory allocation libraries:
